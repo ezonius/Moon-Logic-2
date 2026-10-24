@@ -1,6 +1,11 @@
 ---------------------------------------------------------------------------------------------------
 Version: 0.1.13
 Date: ????
+  Features:
+    - Added entity (&), space location/planet (^), asteroid chunk (!) and quality (?) signal types to combinator inputs and outputs
+  Bugfixes:
+    - Fixed signals of those types being dropped from combinator inputs
+    - Fixed ambiguous signal names reporting "Unknown signal" instead of listing the matching types
   Changes:
 ---------------------------------------------------------------------------------------------------
 Version: 0.1.12

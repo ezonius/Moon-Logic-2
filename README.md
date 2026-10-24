@@ -237,6 +237,27 @@ Regular combinators are best for simple things, as they work ridiculously fast o
 
 --------------------
 
+## Signal names and types
+
+Signals are addressed in Lua by their prototype name, e.g. `red.iron-plate` or `out['signal-A']`.
+If the same name exists for multiple signal types (common with mods), prefix it with the type:
+
+| Prefix | Signal type |
+| --- | --- |
+| `#` | item |
+| `=` | fluid |
+| `@` | virtual |
+| `~` | recipe |
+| `&` | entity |
+| `^` | space location / planet |
+| `!` | asteroid chunk |
+| `?` | quality |
+
+For example, `red['^nauvis']` reads the Nauvis signal and `out['&stone-furnace']` outputs an entity signal.
+Names that are unambiguous can be used without a prefix, so `red.nauvis` and `out['signal-A']` work too.
+Note that entity prototypes almost always share their name with the corresponding placeable item,
+so the plain name keeps meaning the item signal, while the entity signal needs the `&` prefix.
+
 ## Known Issues and quirks
 
 - There are some known limitations wrt storing/copying combinator code via blueprints:

@@ -72,8 +72,13 @@ local function help_window_toggle(pn, toggle_on)
 		'To learn signal names, connect anything with signals to this combinator,',
 		'  and their names will be printed as colored inputs on the right of the code window.',
 		'If signal names are ambiguous (with some mods), signal type prefix can be used',
-		'  ([color=#46a7f7]#[/color] - item, [color=#46a7f7]=[/color] - fluid, [color=#46a7f7]@[/color] - virtual signal)'
-			..' for names that are same between multiple types.',
+		('  ([color=#46a7f7]#[/color] - item, [color=#46a7f7]=[/color] - fluid, '..
+			'[color=#46a7f7]@[/color] - virtual, [color=#46a7f7]~[/color] - recipe, '..
+			'[color=#46a7f7]&[/color] - entity,'),
+		('  [color=#46a7f7]^[/color] - space location/planet, '..
+			'[color=#46a7f7]![/color] - asteroid chunk, '..
+			'[color=#46a7f7]?[/color] - quality signal)'),
+		'  for names that are same between multiple types.',
 		' ' }
 	for n, line in ipairs(lines) do scroll.add{
 		type='label', name='line_'..n, direction='horizontal', caption=line } end

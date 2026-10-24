@@ -63,7 +63,9 @@ local function cn_sig_quality(sig_str)
 	return string.gsub(sig_str, q_name.."/", ''), q_name
 end
 
-local cn_sig_str_prefix = {item='#', fluid='=', virtual='@', recipe='~'}
+local cn_sig_str_prefix = {
+	item = '#', fluid = '=', virtual = '@', recipe = '~',
+	entity = '&', ['space-location'] = '^', ['asteroid-chunk'] = '!', quality = '?' }
 local function cn_sig_str(t, name)
 	-- Translates name or type/name or signal to its type-prefixed string-id
 	if not name then
@@ -80,28 +82,41 @@ local function cn_sig_str(t, name)
 	if not t then
 		return storage.signals_short[name]
 	end
+	local prefix = cn_sig_str_prefix[t.type or t]
+	if not prefix then error(('Unknown signal type "%s"'):format(t.type or t), 2) end
 	if t.quality ~= "normal" and t.quality ~= nil then
-		return t.quality.."/"..cn_sig_str_prefix[t.type]..name
+		return t.quality.."/"..prefix..name
 	end
-	return cn_sig_str_prefix[t.type or t]..name
+	return prefix..name
+end
+
+local function cn_sig_short_str(signal, sig_str)
+	-- Type-prefixed id, shortened to plain name when that name is unambiguous
+	sig_str = sig_str or cn_sig_str(signal)
+	local sig_type = signal.type or 'item'
+	if sig_type == 'recipe' then return sig_str end -- recipe names collide with items
+	if storage.signals_short[signal.name] ~= cn_sig_str_prefix[sig_type]..signal.name
+		then return sig_str end
+	if signal.quality ~= nil and signal.quality ~= 'normal'
+		then return signal.quality..'/'..signal.name end
+	return signal.name
 end
 
 local function cn_sig_name(sig_str)
-	-- Returns abbreviated signal name without prefix
+	-- Returns abbreviated signal name without type prefix, or full id if ambiguous
 	local signame, qname = cn_sig_quality(sig_str)
 	local k = signame:sub(2)
-	local sig_str2 = storage.signals_short[k]
-	if sig_str2 == false then return sig_str
-	elseif sig_str2 == sig_str then return k
-	elseif qname ~= nil and qname.."/"..sig_str2 == sig_str then return qname.."/"..k
-	elseif not sig_str2 then error(('MOD BUG - abbreviation for invalid signal string: %s'):format(sig_str))
-	else error(('MOD BUG - signal string/abbrev mismatch: %s != %s'):format(sig_str, sig_str2)) end
+	if signame:sub(1, 1) == '~' then return sig_str end -- keep recipe prefix
+	if storage.signals_short[k] == signame then
+		if qname then return qname..'/'..k else return k end
+	end
+	return sig_str
 end
 
 local function cn_sig(k, err_level)
 	local signame, qname = cn_sig_quality(k)
 	local sig = storage.signals_short[signame or k]
-	if type(sig) ~= false then sig = storage.signals[sig or signame] end
+	if sig ~= false then sig = storage.signals[sig or signame] end
 	if sig and qname ~="" then
 		sig.quality = qname
 		return sig
@@ -111,7 +126,8 @@ local function cn_sig(k, err_level)
 	if not err_level then return end
 	if sig == false then
 		local m = {}
-		for _,t in ipairs{'virtual', 'item', 'fluid'} do
+		for _, t in ipairs{ 'virtual', 'item', 'fluid', 'recipe',
+				'entity', 'space-location', 'asteroid-chunk', 'quality' } do
 			sig = cn_sig_str(t, k)
 			if storage.signals[sig] then table.insert(m, sig) end
 		end
@@ -133,16 +149,10 @@ local function cn_wire_signals(e, wire_type, canon)
 		.get_circuit_network(ccid)
 	for _, sig in pairs(cn and cn.signals or {}) do
 		-- Check for name=nil SignalIDs (dunno what these are), and items w/ flag=hidden
-		if storage.signals_short[sig.signal.name] == nil then goto skip end
-		if canon then k = cn_sig_str(sig.signal)
-		elseif sig.signal.quality ~= nil and sig.signal.type == 'recipe' then
-			k = sig.signal.quality.."/~"..storage.signals_short[sig.signal.name] and sig.signal.quality.."/~"..sig.signal.name or "~"..cn_sig_str(sig.signal)
-		elseif sig.signal.type == 'recipe' then
-			k = "~"..storage.signals_short[sig.signal.name] and "~"..sig.signal.name or "~"..cn_sig_str(sig.signal)
-		elseif sig.signal.quality ~= nil then
-			k = sig.signal.quality.."/"..storage.signals_short[sig.signal.name] and sig.signal.quality.."/"..sig.signal.name or cn_sig_str(sig.signal)
-		else k = storage.signals_short[sig.signal.name]
-			and sig.signal.name or cn_sig_str(sig.signal) end
+		if sig.signal.name == nil then goto skip end
+		k = cn_sig_str(sig.signal)
+		if storage.signals[k] == nil then goto skip end
+		if not canon then k = cn_sig_short_str(sig.signal, k) end
 		res[k] = sig.count
 	::skip:: end
 	return res
@@ -681,6 +691,7 @@ local function signal_icon_tag(sig)
 	if (sig.type == nil)then return ""	end
 	if helpers.is_valid_sprite_path(sig.type..'/'..sig.name)
 		then return '[img='..sig.type..'/'..sig.name..'] ' end
+	return ''
 end
 
 local function quality_icon_tag(qname)
@@ -742,10 +753,7 @@ local function update_signals_in_guis()
 		table.sort(mlc_out_idx)
 		for val, k in pairs(mlc_out_idx) do
 			local signame, qname = cn_sig_quality(k)
-			val, sig, label = mlc_out[k], storage.signals[signame].name, signal_icon_tag(signame)
-			if string.sub(signame,1,1)== '~' then
-				sig = "~"..sig
-			end
+			val, sig, label = mlc_out[k], cn_sig_name(signame), signal_icon_tag(signame)
 			if qname then
 				label = quality_icon_tag(qname) .. label
 				sig = qname.."/"..sig
@@ -1086,6 +1094,28 @@ local function update_signal_types_table()
 			storage.signals_short[t] = sig_str
 		end
 		storage.signals[sig_str] = sig
+	end
+	-- Space Age signal types (2.0/2.1), which were previously dropped from wires.
+	-- These never displace existing item/fluid/virtual/recipe short names, as entity
+	-- prototypes share almost all names with their placeable item (e.g. "stone-furnace"),
+	-- so such signals are only accessible with a type prefix, without breaking old code.
+	local new_shorts = {} -- name -> sig_str, false if ambiguous between these types
+	for t, protos in pairs{
+			['space-location'] = prototypes.space_location,
+			['asteroid-chunk'] = prototypes.asteroid_chunk,
+			quality = prototypes.quality,
+			entity = prototypes.get_entity_filtered{{filter='hidden', invert=true}} } do
+		for k, _ in pairs(protos) do
+			sig_str = cn_sig_str(t, k)
+			storage.signals[sig_str] = {type=t, name=k, quality="normal"}
+			if storage.signals_short[k] == nil then
+				if new_shorts[k] == nil then new_shorts[k] = sig_str
+				elseif new_shorts[k] ~= sig_str then new_shorts[k] = false end
+			end
+		end
+	end
+	for k, v in pairs(new_shorts) do
+		if storage.signals_short[k] == nil then storage.signals_short[k] = v end
 	end
 end
 
